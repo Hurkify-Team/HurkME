@@ -41,13 +41,34 @@ export const onboardingSchema = z.object({
   socialLinks: z.record(z.string(), z.string()).optional(),
 });
 
-export const proofSubmissionSchema = z.object({
-  proofLinks: z.array(z.string().url()).min(1),
-  proofMediaUrls: z.array(z.string().url()).min(1),
-  claimedViews: z.number().min(0),
-  claimedLikes: z.number().min(0),
-  claimedComments: z.number().min(0).optional(),
-});
+export const proofSubmissionSchema = z
+  .object({
+    proofLinks: z.array(z.string().url()).min(1),
+    proofMediaUrls: z.array(z.string().url()).min(1),
+    claimedViews: z.number().int().min(0).max(500_000_000),
+    claimedLikes: z.number().int().min(0).max(100_000_000),
+    claimedComments: z.number().int().min(0).max(10_000_000).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.claimedLikes > value.claimedViews) {
+      ctx.addIssue({
+        path: ['claimedLikes'],
+        code: z.ZodIssueCode.custom,
+        message: 'Likes cannot be greater than views',
+      });
+    }
+
+    if (
+      value.claimedComments !== undefined &&
+      value.claimedComments > value.claimedViews
+    ) {
+      ctx.addIssue({
+        path: ['claimedComments'],
+        code: z.ZodIssueCode.custom,
+        message: 'Comments cannot be greater than views',
+      });
+    }
+  });
 
 export const adminReviewSchema = z
   .object({

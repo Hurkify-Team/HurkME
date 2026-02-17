@@ -8,6 +8,8 @@ import { formatNaira, titleCase } from '@/lib/format';
 import { proofSubmissionSchema } from '@/lib/schemas';
 import type { Campaign } from '@/lib/types';
 
+type CampaignFilter = 'ALL' | 'OPEN' | 'APPLIED' | 'SUBMITTED';
+
 function parseLines(input: string): string[] {
   return input
     .split('\n')
@@ -15,30 +17,87 @@ function parseLines(input: string): string[] {
     .filter(Boolean);
 }
 
+function toTone(value: string | null | undefined): string {
+  const normalized = (value ?? '').toUpperCase();
+
+  if (normalized === 'OPEN' || normalized === 'APPLIED' || normalized === 'APPROVED') {
+    return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+  }
+  if (normalized === 'REJECTED' || normalized === 'DISQUALIFIED') {
+    return 'border-rose-200 bg-rose-50 text-rose-700';
+  }
+  if (normalized === 'PENDING' || normalized === 'ACCEPTED' || normalized === 'COMPLETED') {
+    return 'border-amber-200 bg-amber-50 text-amber-700';
+  }
+
+  return 'border-slate-200 bg-slate-100 text-slate-700';
+}
+
+function canApply(campaign: Campaign): boolean {
+  if (campaign.status !== 'OPEN') {
+    return false;
+  }
+
+  const myStatus = (campaign.myApplicationStatus ?? '').toUpperCase();
+  if (['APPLIED', 'ACCEPTED', 'COMPLETED', 'DISQUALIFIED'].includes(myStatus)) {
+    return false;
+  }
+
+  return true;
+}
+
 export default function PaidJobsPage() {
   const { request } = useApiClient();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
+  const [campaignFilter, setCampaignFilter] = useState<CampaignFilter>('ALL');
   const [proofLinksText, setProofLinksText] = useState('');
   const [proofMediaText, setProofMediaText] = useState('');
   const [claimedViews, setClaimedViews] = useState('0');
   const [claimedLikes, setClaimedLikes] = useState('0');
   const [claimedComments, setClaimedComments] = useState('0');
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const filteredCampaigns = useMemo(() => {
+    if (campaignFilter === 'OPEN') {
+      return campaigns.filter((campaign) => campaign.status === 'OPEN');
+    }
+    if (campaignFilter === 'APPLIED') {
+      return campaigns.filter((campaign) =>
+        ['APPLIED', 'ACCEPTED'].includes((campaign.myApplicationStatus ?? '').toUpperCase()),
+      );
+    }
+    if (campaignFilter === 'SUBMITTED') {
+      return campaigns.filter((campaign) => campaign.mySubmissionStatus !== null);
+    }
+
+    return campaigns;
+  }, [campaignFilter, campaigns]);
+
+  useEffect(() => {
+    setSelectedId((currentId) => {
+      if (currentId && filteredCampaigns.some((campaign) => campaign.id === currentId)) {
+        return currentId;
+      }
+      return filteredCampaigns[0]?.id ?? '';
+    });
+  }, [filteredCampaigns]);
 
   const selectedCampaign = useMemo(
-    () => campaigns.find((campaign) => campaign.id === selectedId) ?? null,
-    [campaigns, selectedId],
+    () => filteredCampaigns.find((campaign) => campaign.id === selectedId) ?? null,
+    [filteredCampaigns, selectedId],
   );
+
+  const proofLinks = useMemo(() => parseLines(proofLinksText), [proofLinksText]);
+  const proofMediaUrls = useMemo(() => parseLines(proofMediaText), [proofMediaText]);
 
   const loadCampaigns = async () => {
     try {
       const data = await request<Campaign[]>('/campaigns');
       setCampaigns(data);
-      if (!selectedId && data.length) {
-        setSelectedId(data[0].id);
-      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load paid jobs');
@@ -53,6 +112,7 @@ export default function PaidJobsPage() {
     try {
       await request(`/campaigns/${campaignId}/apply`, { method: 'POST' });
       await loadCampaigns();
+      setSuccess('Application sent. You can submit proof once your content is live.');
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Apply failed');
@@ -86,6 +146,7 @@ export default function PaidJobsPage() {
 
       setProofMediaText((prev) => (prev ? `${prev}\n${presign.publicUrl}` : presign.publicUrl));
       setError(null);
+      setSuccess('Screenshot uploaded. You can submit now.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Screenshot upload failed');
     } finally {
@@ -99,9 +160,10 @@ export default function PaidJobsPage() {
     }
 
     try {
+      setSubmitting(true);
       const payload = {
-        proofLinks: parseLines(proofLinksText),
-        proofMediaUrls: parseLines(proofMediaText),
+        proofLinks,
+        proofMediaUrls,
         claimedViews: Number(claimedViews),
         claimedLikes: Number(claimedLikes),
         claimedComments: Number(claimedComments),
@@ -115,13 +177,18 @@ export default function PaidJobsPage() {
 
       await request(`/campaigns/${selectedCampaign.id}/submit`, {
         method: 'POST',
-        json: payload,
+        json: parsed.data,
       });
 
       await loadCampaigns();
+      setSuccess('Proof submitted. Admin review will update your status soon.');
       setError(null);
+      setProofLinksText('');
+      setProofMediaText('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Proof submission failed');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -129,52 +196,84 @@ export default function PaidJobsPage() {
     <div className="grid gap-4 lg:grid-cols-[1.15fr_1fr]">
       <SectionCard title="Paid Jobs" subtitle="Apply for legit brand work based on real performance.">
         <InlineError message={error} />
-        <div className="space-y-3">
-          {campaigns.map((campaign) => (
-            <article
-              key={campaign.id}
-              className={`cursor-pointer rounded-xl border p-3 ${
-                selectedId === campaign.id
-                  ? 'border-brand-ocean bg-brand-cream/60'
-                  : 'border-slate-200 bg-white'
+        {success ? (
+          <p className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            {success}
+          </p>
+        ) : null}
+
+        <div className="mb-3 flex flex-wrap gap-2">
+          {(['ALL', 'OPEN', 'APPLIED', 'SUBMITTED'] as CampaignFilter[]).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setCampaignFilter(value)}
+              className={`rounded-full border px-3 py-1 text-xs ${
+                campaignFilter === value
+                  ? 'border-brand-ocean bg-brand-ocean text-white'
+                  : 'border-slate-300 bg-white text-slate-700'
               }`}
-              onClick={() => setSelectedId(campaign.id)}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-semibold text-brand-ink">{campaign.title}</h3>
-                  <p className="text-sm text-slate-600">{campaign.description}</p>
-                  <p className="mt-1 text-xs text-brand-ocean">
-                    {campaign.nicheTarget} • {campaign.tier} • {campaign.platform}
-                  </p>
-                  <p className="text-xs text-slate-600">
-                    Budget: {formatNaira(campaign.budgetTotal)} • Fee: {campaign.platformFeePct}%
-                  </p>
-                </div>
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700">
-                  {titleCase(campaign.status)}
-                </span>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                <span className="rounded-full bg-slate-100 px-2 py-1">
-                  App: {campaign.myApplicationStatus ?? 'none'}
-                </span>
-                <span className="rounded-full bg-slate-100 px-2 py-1">
-                  Submission: {campaign.mySubmissionStatus ?? 'none'}
-                </span>
-              </div>
-              <button
-                className="mt-3 rounded-full bg-brand-ocean px-3 py-1 text-xs text-white"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void apply(campaign.id);
-                }}
-              >
-                Apply
-              </button>
-            </article>
+              {value}
+            </button>
           ))}
-          {!campaigns.length ? <p className="text-sm text-slate-500">No paid jobs yet.</p> : null}
+        </div>
+
+        <div className="space-y-3">
+          {filteredCampaigns.map((campaign) => {
+            const applyEnabled = canApply(campaign);
+            return (
+              <article
+                key={campaign.id}
+                className={`cursor-pointer rounded-xl border p-3 ${
+                  selectedId === campaign.id
+                    ? 'border-brand-ocean bg-brand-cream/60'
+                    : 'border-slate-200 bg-white'
+                }`}
+                onClick={() => setSelectedId(campaign.id)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold text-brand-ink">{campaign.title}</h3>
+                    <p className="text-sm text-slate-600">{campaign.description}</p>
+                    <p className="mt-1 text-xs text-brand-ocean">
+                      {campaign.nicheTarget} • {campaign.tier} • {campaign.platform}
+                    </p>
+                    <p className="text-xs text-slate-600">
+                      Budget: {formatNaira(campaign.budgetTotal)} • Fee: {campaign.platformFeePct}%
+                    </p>
+                  </div>
+                  <span className={`rounded-full border px-2 py-1 text-xs ${toTone(campaign.status)}`}>
+                    {titleCase(campaign.status)}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                  <span className={`rounded-full border px-2 py-1 ${toTone(campaign.myApplicationStatus)}`}>
+                    App: {campaign.myApplicationStatus ?? 'none'}
+                  </span>
+                  <span className={`rounded-full border px-2 py-1 ${toTone(campaign.mySubmissionStatus)}`}>
+                    Submission: {campaign.mySubmissionStatus ?? 'none'}
+                  </span>
+                </div>
+                <button
+                  className="mt-3 rounded-full bg-brand-ocean px-3 py-1 text-xs text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={!applyEnabled}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (applyEnabled) {
+                      void apply(campaign.id);
+                    }
+                  }}
+                  type="button"
+                >
+                  {applyEnabled ? 'Apply' : 'Applied'}
+                </button>
+              </article>
+            );
+          })}
+          {!filteredCampaigns.length ? (
+            <p className="text-sm text-slate-500">No paid jobs for this filter yet.</p>
+          ) : null}
         </div>
       </SectionCard>
 
@@ -183,9 +282,14 @@ export default function PaidJobsPage() {
           <div className="space-y-3">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
               <p className="font-semibold text-brand-ink">{selectedCampaign.title}</p>
-              <p className="text-slate-600">
-                Deliverables: {JSON.stringify(selectedCampaign.requiredDeliverables)}
-              </p>
+              <p className="mt-1 text-xs text-slate-600">Deliverables</p>
+              <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-slate-700">
+                {Object.entries(selectedCampaign.requiredDeliverables).map(([key, value]) => (
+                  <li key={key}>
+                    {key}: {String(value)}
+                  </li>
+                ))}
+              </ul>
             </div>
 
             <textarea
@@ -241,11 +345,19 @@ export default function PaidJobsPage() {
               />
             </div>
 
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              <p>Proof links added: {proofLinks.length}</p>
+              <p>Screenshot URLs added: {proofMediaUrls.length}</p>
+              <p className="mt-1">Admin will review proof before payout is computed.</p>
+            </div>
+
             <button
-              className="rounded-full bg-brand-ocean px-4 py-2 text-sm text-white"
+              className="rounded-full bg-brand-ocean px-4 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-60"
               onClick={() => void submitProof()}
+              disabled={submitting}
+              type="button"
             >
-              Submit proof
+              {submitting ? 'Submitting...' : 'Submit proof'}
             </button>
           </div>
         ) : (

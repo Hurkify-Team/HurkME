@@ -1,0 +1,63 @@
+name: Deploy Staging
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    concurrency:
+      group: staging-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Validate deploy hook secrets
+        env:
+          STAGING_API_DEPLOY_HOOK_URL: ${{ secrets.STAGING_API_DEPLOY_HOOK_URL }}
+          STAGING_WEB_DEPLOY_HOOK_URL: ${{ secrets.STAGING_WEB_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$STAGING_API_DEPLOY_HOOK_URL" ]; then
+            echo "::error::Missing STAGING_API_DEPLOY_HOOK_URL secret"
+            exit 1
+          fi
+          if [ -z "$STAGING_WEB_DEPLOY_HOOK_URL" ]; then
+            echo "::error::Missing STAGING_WEB_DEPLOY_HOOK_URL secret"
+            exit 1
+          fi
+
+      - name: Trigger API staging deploy
+        env:
+          STAGING_API_DEPLOY_HOOK_URL: ${{ secrets.STAGING_API_DEPLOY_HOOK_URL }}
+        run: curl -fsSL -X POST "$STAGING_API_DEPLOY_HOOK_URL"
+
+      - name: Trigger web staging deploy
+        env:
+          STAGING_WEB_DEPLOY_HOOK_URL: ${{ secrets.STAGING_WEB_DEPLOY_HOOK_URL }}
+        run: curl -fsSL -X POST "$STAGING_WEB_DEPLOY_HOOK_URL"
+
+      - name: Wait for rollout window
+        run: sleep 45
+
+      - name: Verify API staging health (optional)
+        env:
+          STAGING_API_HEALTHCHECK_URL: ${{ secrets.STAGING_API_HEALTHCHECK_URL }}
+        run: |
+          if [ -z "$STAGING_API_HEALTHCHECK_URL" ]; then
+            echo "Skipping API health check (secret missing)."
+            exit 0
+          fi
+          curl -fsSL "$STAGING_API_HEALTHCHECK_URL"
+
+      - name: Verify web staging health (optional)
+        env:
+          STAGING_WEB_HEALTHCHECK_URL: ${{ secrets.STAGING_WEB_HEALTHCHECK_URL }}
+        run: |
+          if [ -z "$STAGING_WEB_HEALTHCHECK_URL" ]; then
+            echo "Skipping web health check (secret missing)."
+            exit 0
+          fi
+          curl -fsSL "$STAGING_WEB_HEALTHCHECK_URL"
