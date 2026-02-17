@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AUTH_BYPASS: "true"
+      NEXT_PUBLIC_AUTH_BYPASS: "true"
+      NEXT_PUBLIC_API_URL: "http://localhost:4000"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: API deterministic unit tests
+        run: npm --workspace @hurkme/api run test:fast
+
+      - name: API admin integration tests
+        run: npm --workspace @hurkme/api run test:integration
+
+      - name: Web production build
+        run: npm --workspace @hurkme/web run build

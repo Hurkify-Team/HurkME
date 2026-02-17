@@ -1,0 +1,167 @@
+# HurkME MVP
+
+HurkME is a legit creator growth + creator discovery + paid jobs platform.
+
+## Compliance rules in this MVP
+- No automation of likes/follows/comments on Instagram, TikTok, X, YouTube, or LinkedIn.
+- No follower boosting or engagement pod behavior.
+- Daily guidance is recommendation-only.
+- Paid Jobs payouts are performance-based and tied to proof + review.
+
+## Monorepo structure
+```text
+hurkme/
+  apps/
+    api/        # NestJS API + Prisma + BullMQ workers
+    web/        # Next.js UI + Tailwind + Clerk integration
+  packages/
+    shared/     # Shared domain helpers (tier logic, constants)
+  docker-compose.yml
+  README.md
+```
+
+## Stack
+- Web: Next.js (App Router), TypeScript, Tailwind
+- API: NestJS, TypeScript
+- DB: PostgreSQL + Prisma migrations
+- Cache/Queue: Redis + BullMQ
+- Search: Meilisearch
+- Auth: Clerk (with local dev bypass mode)
+- Storage: S3-compatible presigned upload flow
+- Monitoring: Sentry placeholder
+
+## Quick start
+1. Start infra:
+```bash
+docker compose up -d
+```
+
+2. Install deps:
+```bash
+npm install
+```
+
+3. Copy env files:
+```bash
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env.local
+```
+
+4. Run migrations + seed:
+```bash
+npm --workspace @hurkme/api run prisma:generate
+npm --workspace @hurkme/api run migrate:deploy
+npm --workspace @hurkme/api run seed
+```
+
+5. Start apps:
+```bash
+npm run dev
+```
+
+6. Start worker (second terminal):
+```bash
+npm run dev:worker
+```
+
+## Local auth modes
+### Demo mode (default in examples)
+- `apps/api/.env`: `AUTH_BYPASS=true`
+- `apps/web/.env.local`: `NEXT_PUBLIC_AUTH_BYPASS=true`
+- Sign in via `/sign-in` demo selector.
+
+Seeded auth provider IDs:
+- `demo_creator_1`
+- `demo_creator_2`
+- `demo_creator_3`
+- `demo_admin_1` (admin routes)
+
+### Clerk mode
+- Set Clerk keys in both app env files.
+- Set `AUTH_BYPASS=false` and `NEXT_PUBLIC_AUTH_BYPASS=false`.
+- Backend verifies bearer tokens using Clerk secret key.
+
+## API docs
+- Swagger OpenAPI: `http://localhost:4000/docs`
+
+## Core endpoints implemented
+- `GET /me`
+- `GET /health`
+- `POST /profile/onboarding`
+- `PATCH /profile`
+- `GET /creators/:id`
+- `GET /feed`
+- `GET /creators/search`
+- `POST /interactions`
+- `GET /daily-steps/today`
+- `POST /daily-steps/:id/complete`
+- `GET /streaks`
+- `GET /campaigns`
+- `GET /campaigns/:id`
+- `POST /campaigns/:id/apply`
+- `POST /campaigns/:id/submit`
+- `POST /uploads/presign`
+- `GET /wallet`
+- `GET /payouts`
+- `POST /admin/campaigns`
+- `GET /admin/submissions`
+- `POST /admin/submissions/:id/review`
+- `POST /admin/campaigns/:id/compute-payouts`
+- `GET /admin/campaigns/:id/payout-report`
+
+## Jobs and scheduling
+- Daily Steps assignment queue: every day at 6am server time.
+- Match refresh queue: nightly at 2am server time.
+- On onboarding/profile update: enqueue per-user match refresh + feed refresh.
+
+## Payout model implemented
+- Platform fee = `budget_total * platform_fee_pct`
+- Payout pool = `budget_total - platform_fee`
+- `BASE_BONUS`: base pool = 20% split equally, bonus pool = 80% by adjusted performance.
+- `PERFORMANCE_ONLY`: 100% by adjusted performance.
+- Performance score uses normalized views/likes/comments/engagement weights.
+- If comments are not used, comment weight is redistributed to views/likes.
+- Adjusted score = performance score × authenticity score.
+
+## Anti-fraud heuristics (MVP)
+- Flags extreme like/view ratio vs campaign median.
+- Flags suspicious early high-view submissions.
+- Flags repeated identical proof patterns.
+- Applies authenticity score reductions (`1.0`, `0.7`, `0.4`).
+
+## Tests
+Run API unit tests:
+```bash
+npm --workspace @hurkme/api run test
+```
+
+Included tests:
+- follower tier classification boundaries
+- payout distribution math
+- admin review and payout endpoint integration checks (`test:integration`)
+
+Optional:
+```bash
+npm --workspace @hurkme/api run test:jest
+npm --workspace @hurkme/api run test:integration
+npm --workspace @hurkme/web run build
+```
+
+## CI
+- GitHub Actions workflow: `.github/workflows/ci.yml`
+- Runs on push/PR:
+  - API deterministic tests (`test:fast`)
+  - API admin integration tests (`test:integration`)
+  - Web production build
+
+## Branch protection
+- Recommended policy and setup guide: `docs/branch-protection.md`
+- Quick apply (GitHub CLI):
+```bash
+./scripts/set-branch-protection.sh <owner/repo> main "CI / test-and-build"
+```
+
+## Important notes
+- This MVP is intentionally manual-first for verification and payout operations.
+- No social platform bot automation is included.
+- Admin payout processing remains manual while calculation and reporting are structured for future automation.

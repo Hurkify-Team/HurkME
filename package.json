@@ -1,0 +1,28 @@
+{
+  "name": "hurkme-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "dev": "npm-run-all --parallel dev:api dev:web",
+    "dev:api": "npm --workspace @hurkme/api run start:dev",
+    "dev:web": "npm --workspace @hurkme/web run dev",
+    "dev:worker": "npm --workspace @hurkme/api run worker:dev",
+    "db:migrate": "npm --workspace @hurkme/api run migrate:deploy",
+    "db:seed": "npm --workspace @hurkme/api run seed",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspaces",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3"
+  }
+}

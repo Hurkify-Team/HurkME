@@ -1,0 +1,392 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CREATOR
+  ADMIN
+  ORG
+}
+
+enum PrimaryPlatform {
+  INSTAGRAM
+  TIKTOK
+  YOUTUBE
+  X
+  LINKEDIN
+}
+
+enum Niche {
+  FITNESS
+  TECH
+  FASHION
+  MUSIC
+  BUSINESS
+  EDUCATION
+  LIFESTYLE
+  COMEDY
+  GAMING
+  OTHER
+}
+
+enum FollowerTier {
+  T1
+  T2
+  T3
+}
+
+enum Goal {
+  FIRST_FOLLOWERS
+  BETTER_ENGAGEMENT
+  MONETIZE
+  AUTHORITY
+  SALES
+}
+
+enum GrowthStyle {
+  DAILY_STEPS
+  COLLABORATION
+  TRENDS
+  DATA_LIGHT_GUIDANCE
+}
+
+enum AudienceRegion {
+  LOCAL
+  AFRICA
+  GLOBAL
+  SPECIFIC_COUNTRY
+}
+
+enum StepStatus {
+  ASSIGNED
+  COMPLETED
+  SKIPPED
+}
+
+enum InteractionAction {
+  VIEW
+  SAVE
+  FEEDBACK
+  COLLAB_REQUEST
+}
+
+enum CampaignTier {
+  T1
+  T2
+  T3
+}
+
+enum PayoutModel {
+  BASE_BONUS
+  PERFORMANCE_ONLY
+}
+
+enum CampaignStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  IN_REVIEW
+  PAID_OUT
+}
+
+enum ApplicationStatus {
+  APPLIED
+  ACCEPTED
+  REJECTED
+  COMPLETED
+  DISQUALIFIED
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum LedgerDirection {
+  CREDIT
+  DEBIT
+}
+
+model User {
+  id                  String                 @id @default(uuid()) @db.Uuid
+  authProviderId      String                 @unique @map("auth_provider_id")
+  username            String?                @unique
+  displayName         String                 @map("display_name")
+  email               String                 @unique
+  role                UserRole               @default(CREATOR)
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
+  creatorProfile      CreatorProfile?
+  streak              Streak?
+  userDailySteps      UserDailyStep[]
+  interactionsMade    Interaction[]          @relation("ActorInteractions")
+  interactionsRecv    Interaction[]          @relation("TargetInteractions")
+  matches             Match[]                @relation("UserMatches")
+  matchedBy           Match[]                @relation("MatchedBy")
+  feedCache           FeedCache?
+  applications        CampaignApplication[]
+  submissions         CampaignSubmission[]
+  metrics             CampaignMetric[]
+  payouts             Payout[]
+  walletLedgerEntries WalletLedger[]
+
+  @@map("users")
+}
+
+model CreatorProfile {
+  userId              String         @id @map("user_id") @db.Uuid
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  primaryPlatform     PrimaryPlatform @map("primary_platform")
+  primaryNiche        Niche          @map("primary_niche")
+  secondaryNiches     Niche[]        @default([]) @map("secondary_niches")
+  followerCount       Int            @map("follower_count")
+  followerTier        FollowerTier   @map("follower_tier")
+  goal                Goal
+  growthStyle         GrowthStyle    @map("growth_style")
+  audienceRegion      AudienceRegion @map("audience_region")
+  audienceAgeBand     String?        @map("audience_age_band")
+  country             String?
+  language            String?
+  bio                 String?
+  photoUrl            String?        @map("photo_url")
+  socialLinks         Json           @default("{}") @map("social_links")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  @@index([primaryNiche])
+  @@index([followerTier])
+  @@index([country])
+  @@map("creator_profile")
+}
+
+model NicheCatalog {
+  id        Int      @id @default(autoincrement())
+  key       Niche    @unique
+  label     String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("niche_catalog")
+}
+
+model DailyStep {
+  id                 String        @id @default(uuid()) @db.Uuid
+  title              String        @unique
+  description        String
+  type               String
+  difficulty         Int           @default(1)
+  rewardPoints       Int           @default(5) @map("reward_points")
+  active             Boolean       @default(true)
+  targetGoals        Goal[]        @default([]) @map("target_goals")
+  targetGrowthStyles GrowthStyle[] @default([]) @map("target_growth_styles")
+  targetNiches       Niche[]       @default([]) @map("target_niches")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+  userDailySteps     UserDailyStep[]
+
+  @@map("daily_steps")
+}
+
+model UserDailyStep {
+  id           String     @id @default(uuid()) @db.Uuid
+  userId       String     @map("user_id") @db.Uuid
+  dailyStepId  String     @map("daily_step_id") @db.Uuid
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyStep    DailyStep  @relation(fields: [dailyStepId], references: [id], onDelete: Cascade)
+  dateAssigned DateTime   @db.Date @map("date_assigned")
+  status       StepStatus @default(ASSIGNED)
+  evidenceUrl  String?    @map("evidence_url")
+  completedAt  DateTime?  @map("completed_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@unique([userId, dailyStepId, dateAssigned])
+  @@index([userId, dateAssigned])
+  @@map("user_daily_steps")
+}
+
+model Streak {
+  userId            String   @id @map("user_id") @db.Uuid
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentStreak     Int      @default(0) @map("current_streak")
+  longestStreak     Int      @default(0) @map("longest_streak")
+  lastCompletedDate DateTime? @db.Date @map("last_completed_date")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("streaks")
+}
+
+model Interaction {
+  id           String            @id @default(uuid()) @db.Uuid
+  actorUserId  String            @map("actor_user_id") @db.Uuid
+  targetUserId String            @map("target_user_id") @db.Uuid
+  action       InteractionAction
+  meta         Json              @default("{}")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  actor        User              @relation("ActorInteractions", fields: [actorUserId], references: [id], onDelete: Cascade)
+  target       User              @relation("TargetInteractions", fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  @@index([actorUserId, createdAt])
+  @@index([targetUserId, createdAt])
+  @@map("interactions")
+}
+
+model Match {
+  userId        String   @map("user_id") @db.Uuid
+  matchedUserId String   @map("matched_user_id") @db.Uuid
+  score         Float
+  reasons       Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+  user          User     @relation("UserMatches", fields: [userId], references: [id], onDelete: Cascade)
+  matchedUser   User     @relation("MatchedBy", fields: [matchedUserId], references: [id], onDelete: Cascade)
+
+  @@id([userId, matchedUserId])
+  @@index([userId, score])
+  @@map("matches")
+}
+
+model FeedCache {
+  userId      String   @id @map("user_id") @db.Uuid
+  items       Json
+  generatedAt DateTime @default(now()) @map("generated_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("feed_cache")
+}
+
+model Organization {
+  id           String     @id @default(uuid()) @db.Uuid
+  name         String
+  contactEmail String     @unique @map("contact_email")
+  phone        String?
+  verified     Boolean    @default(false)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  campaigns    Campaign[]
+
+  @@map("organizations")
+}
+
+model Campaign {
+  id                   String                @id @default(uuid()) @db.Uuid
+  orgId                String                @map("org_id") @db.Uuid
+  organization         Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  title                String                @unique
+  description          String
+  platform             PrimaryPlatform
+  nicheTarget          Niche                 @map("niche_target")
+  tier                 CampaignTier
+  minFollowers         Int                   @map("min_followers")
+  maxFollowers         Int?                  @map("max_followers")
+  requiredDeliverables Json                  @map("required_deliverables")
+  performanceWeights   Json                  @default("{}") @map("performance_weights")
+  startDate            DateTime              @db.Date @map("start_date")
+  endDate              DateTime              @db.Date @map("end_date")
+  budgetTotal          Int                   @map("budget_total")
+  platformFeePct       Int                   @map("platform_fee_pct")
+  payoutModel          PayoutModel           @map("payout_model")
+  status               CampaignStatus        @default(DRAFT)
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  applications         CampaignApplication[]
+  submissions          CampaignSubmission[]
+  metrics              CampaignMetric[]
+  payouts              Payout[]
+
+  @@index([status, startDate])
+  @@map("campaigns")
+}
+
+model CampaignApplication {
+  id         String            @id @default(uuid()) @db.Uuid
+  campaignId String            @map("campaign_id") @db.Uuid
+  userId     String            @map("user_id") @db.Uuid
+  status     ApplicationStatus @default(APPLIED)
+  createdAt  DateTime          @default(now()) @map("created_at")
+  campaign   Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+  @@index([userId, status])
+  @@map("campaign_applications")
+}
+
+model CampaignSubmission {
+  id             String       @id @default(uuid()) @db.Uuid
+  campaignId     String       @map("campaign_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  campaign       Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proofLinks     Json         @map("proof_links")
+  proofMediaUrls Json         @map("proof_media_urls")
+  claimedViews   Int          @default(0) @map("claimed_views")
+  claimedLikes   Int          @default(0) @map("claimed_likes")
+  claimedComments Int?        @map("claimed_comments")
+  submittedAt    DateTime     @default(now()) @map("submitted_at")
+  reviewStatus   ReviewStatus @default(PENDING) @map("review_status")
+  reviewerNotes  String?      @map("reviewer_notes")
+
+  @@index([campaignId, reviewStatus])
+  @@unique([campaignId, userId])
+  @@map("campaign_submissions")
+}
+
+model CampaignMetric {
+  id               String   @id @default(uuid()) @db.Uuid
+  campaignId       String   @map("campaign_id") @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  campaign         Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verifiedViews    Int      @default(0) @map("verified_views")
+  verifiedLikes    Int      @default(0) @map("verified_likes")
+  verifiedComments Int      @default(0) @map("verified_comments")
+  engagementRate   Float    @default(0) @map("engagement_rate")
+  authenticityScore Float   @default(1) @map("authenticity_score")
+  performanceScore Float    @default(0) @map("performance_score")
+  payoutAmount     Int      @default(0) @map("payout_amount")
+  computedAt       DateTime @default(now()) @map("computed_at")
+
+  @@unique([campaignId, userId])
+  @@map("campaign_metrics")
+}
+
+model Payout {
+  id         String       @id @default(uuid()) @db.Uuid
+  campaignId String       @map("campaign_id") @db.Uuid
+  userId     String       @map("user_id") @db.Uuid
+  campaign   Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount     Int
+  status     PayoutStatus @default(PENDING)
+  paidAt     DateTime?    @map("paid_at")
+  createdAt  DateTime     @default(now()) @map("created_at")
+
+  @@unique([campaignId, userId])
+  @@index([userId, status])
+  @@map("payouts")
+}
+
+model WalletLedger {
+  id        String          @id @default(uuid()) @db.Uuid
+  userId    String          @map("user_id") @db.Uuid
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  direction LedgerDirection
+  amount    Int
+  reason    String
+  refId     String?         @map("ref_id")
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("wallet_ledger")
+}
