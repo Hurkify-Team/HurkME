@@ -10,6 +10,7 @@
     "test": "npm run test:fast",
     "test:fast": "ts-node -r tsconfig-paths/register test/run-unit-tests.ts",
     "test:integration": "jest --runInBand --ci --no-cache --testPathPattern=admin.integration.spec.ts",
+    "test:e2e": "ts-node -r tsconfig-paths/register test/core-flow.e2e.ts",
     "test:jest": "jest --runInBand --ci --no-cache",
     "test:watch": "jest --watch",
     "prisma:generate": "prisma generate",

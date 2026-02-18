@@ -11,10 +11,46 @@ jobs:
   test-and-build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: hurkme
+          POSTGRES_USER: hurkme
+          POSTGRES_PASSWORD: hurkme
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hurkme -d hurkme"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      meilisearch:
+        image: getmeili/meilisearch:v1.12
+        env:
+          MEILI_MASTER_KEY: masterKey
+          MEILI_ENV: development
+        ports:
+          - 7700:7700
     env:
+      NODE_ENV: test
       AUTH_BYPASS: "true"
       NEXT_PUBLIC_AUTH_BYPASS: "true"
       NEXT_PUBLIC_API_URL: "http://localhost:4000"
+      DATABASE_URL: "postgresql://hurkme:hurkme@localhost:5432/hurkme?schema=public"
+      REDIS_URL: "redis://localhost:6379"
+      MEILI_URL: "http://localhost:7700"
+      MEILI_MASTER_KEY: "masterKey"
+      APP_URL: "http://localhost:3000"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,11 +67,52 @@ jobs:
       - name: Generate Prisma client
         run: npm --workspace @hurkme/api run prisma:generate
 
+      - name: Apply database migrations
+        run: npm --workspace @hurkme/api run migrate:deploy
+
+      - name: Seed database
+        run: npm --workspace @hurkme/api run seed
+
       - name: API deterministic unit tests
         run: npm --workspace @hurkme/api run test:fast
 
       - name: API admin integration tests
         run: npm --workspace @hurkme/api run test:integration
 
+      - name: Build API
+        run: npm --workspace @hurkme/api run build
+
+      - name: Start API server
+        run: |
+          node apps/api/dist/main.js > /tmp/hurkme-api.log 2>&1 &
+          echo $! > /tmp/hurkme-api.pid
+
+      - name: Wait for API health
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:4000/health >/dev/null; then
+              echo "API is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API failed to become healthy"
+          cat /tmp/hurkme-api.log || true
+          exit 1
+
+      - name: Core flow e2e
+        run: npm --workspace @hurkme/api run test:e2e
+
       - name: Web production build
         run: npm --workspace @hurkme/web run build
+
+      - name: Print API logs on failure
+        if: failure()
+        run: cat /tmp/hurkme-api.log || true
+
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -f /tmp/hurkme-api.pid ]; then
+            kill "$(cat /tmp/hurkme-api.pid)" || true
+          fi

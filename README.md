@@ -139,11 +139,13 @@ Included tests:
 - follower tier classification boundaries
 - payout distribution math
 - admin review and payout endpoint integration checks (`test:integration`)
+- core flow e2e (`onboarding -> apply -> submit proof -> admin review -> payout`)
 
 Optional:
 ```bash
 npm --workspace @hurkme/api run test:jest
 npm --workspace @hurkme/api run test:integration
+npm --workspace @hurkme/api run test:e2e
 npm --workspace @hurkme/web run build
 ```
 
@@ -152,7 +154,18 @@ npm --workspace @hurkme/web run build
 - Runs on push/PR:
   - API deterministic tests (`test:fast`)
   - API admin integration tests (`test:integration`)
+  - API core flow e2e (`test:e2e`)
   - Web production build
+
+## Staging deploy
+- GitHub Actions workflow: `.github/workflows/staging-deploy.yml`
+- Trigger: after successful `CI` run on `main`
+- Required repository secrets:
+  - `STAGING_API_DEPLOY_HOOK_URL`
+  - `STAGING_WEB_DEPLOY_HOOK_URL`
+- Optional healthcheck secrets:
+  - `STAGING_API_HEALTHCHECK_URL`
+  - `STAGING_WEB_HEALTHCHECK_URL`
 
 ## Branch protection
 - Recommended policy and setup guide: `docs/branch-protection.md`
