@@ -96,6 +96,7 @@ Seeded auth provider IDs:
 - `POST /profile/onboarding`
 - `PATCH /profile`
 - `GET /creators/:id`
+- `GET /profile/saved-creators`
 - `GET /feed`
 - `GET /creators/search`
 - `POST /interactions`
@@ -109,15 +110,21 @@ Seeded auth provider IDs:
 - `POST /uploads/presign`
 - `GET /wallet`
 - `GET /payouts`
+- `GET /admin/campaigns`
 - `POST /admin/campaigns`
+- `POST /admin/campaigns/:id/invite`
 - `GET /admin/submissions`
 - `POST /admin/submissions/:id/review`
 - `POST /admin/campaigns/:id/compute-payouts`
 - `GET /admin/campaigns/:id/payout-report`
+- `GET /admin/audit-logs`
 
 ## Jobs and scheduling
 - Daily Steps assignment queue: every day at 6am server time.
 - Match refresh queue: nightly at 2am server time.
+- Daily Steps cleanup queue: nightly (marks stale assigned steps as skipped).
+- Active feed refresh queue: every 2 hours for recently active creators.
+- Campaign auto-close queue: every 30 minutes for expired campaigns.
 - On onboarding/profile update: enqueue per-user match refresh + feed refresh.
 
 ## Payout model implemented

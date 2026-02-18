@@ -98,3 +98,50 @@ export type AdminSubmission = {
     email: string;
   } | null;
 };
+
+export type SavedCreatorEntry = {
+  savedAt: string;
+  creator: {
+    id: string;
+    displayName: string;
+    username?: string | null;
+    creatorProfile: {
+      primaryNiche: string;
+      followerTier: string;
+      primaryPlatform: string;
+      country?: string | null;
+      language?: string | null;
+      bio?: string | null;
+    };
+    streak?: {
+      currentStreak: number;
+    } | null;
+  };
+};
+
+export type AdminCampaign = {
+  id: string;
+  title: string;
+  description: string;
+  platform: string;
+  nicheTarget: string;
+  tier: string;
+  minFollowers: number;
+  maxFollowers?: number | null;
+  budgetTotal: number;
+  platformFeePct: number;
+  payoutModel: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  organization?: {
+    id: string;
+    name: string;
+    verified: boolean;
+  } | null;
+  _count?: {
+    applications: number;
+    submissions: number;
+    payouts: number;
+  };
+};

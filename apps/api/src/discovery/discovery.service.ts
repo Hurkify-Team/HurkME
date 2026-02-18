@@ -178,6 +178,57 @@ export class DiscoveryService {
     return this.getFeed(userId);
   }
 
+  async refreshFeedsForActiveUsers(): Promise<number> {
+    const recentThreshold = new Date(Date.now() - 1000 * 60 * 60 * 24 * 7);
+
+    const [activeBySteps, activeByInteractions] = await Promise.all([
+      this.prisma.userDailyStep.findMany({
+        where: {
+          completedAt: {
+            gte: recentThreshold,
+          },
+        },
+        select: { userId: true },
+        distinct: ['userId'],
+        take: 400,
+      }),
+      this.prisma.interaction.findMany({
+        where: {
+          createdAt: {
+            gte: recentThreshold,
+          },
+        },
+        select: { actorUserId: true },
+        distinct: ['actorUserId'],
+        take: 400,
+      }),
+    ]);
+
+    const userIds = new Set<string>();
+    for (const row of activeBySteps) {
+      userIds.add(row.userId);
+    }
+    for (const row of activeByInteractions) {
+      userIds.add(row.actorUserId);
+    }
+
+    if (!userIds.size) {
+      const fallback = await this.prisma.creatorProfile.findMany({
+        select: { userId: true },
+        take: 100,
+      });
+      for (const row of fallback) {
+        userIds.add(row.userId);
+      }
+    }
+
+    for (const userId of userIds) {
+      await this.refreshFeed(userId);
+    }
+
+    return userIds.size;
+  }
+
   async searchCreators(query: SearchCreatorsDto) {
     return this.searchService.searchCreators(query.q ?? '', {
       niche: query.niche,

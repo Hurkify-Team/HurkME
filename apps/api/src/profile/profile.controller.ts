@@ -34,4 +34,9 @@ export class ProfileController {
   getCreator(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.profileService.getCreatorById(id);
   }
+
+  @Get('profile/saved-creators')
+  getSavedCreators(@CurrentUser() user: AuthenticatedUser) {
+    return this.profileService.getSavedCreators(user.id);
+  }
 }

@@ -96,6 +96,7 @@ enum CampaignStatus {
 
 enum ApplicationStatus {
   APPLIED
+  INVITED
   ACCEPTED
   REJECTED
   COMPLETED
@@ -141,6 +142,7 @@ model User {
   metrics             CampaignMetric[]
   payouts             Payout[]
   walletLedgerEntries WalletLedger[]
+  adminAuditLogs      AdminAuditLog[]        @relation("AdminAuditUser")
 
   @@map("users")
 }
@@ -389,4 +391,19 @@ model WalletLedger {
 
   @@index([userId, createdAt])
   @@map("wallet_ledger")
+}
+
+model AdminAuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  adminUserId String   @map("admin_user_id") @db.Uuid
+  adminUser   User     @relation("AdminAuditUser", fields: [adminUserId], references: [id], onDelete: Cascade)
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  payload     Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([adminUserId, createdAt])
+  @@index([entityType, createdAt])
+  @@map("admin_audit_logs")
 }

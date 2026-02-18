@@ -20,13 +20,23 @@ function parseLines(input: string): string[] {
 function toTone(value: string | null | undefined): string {
   const normalized = (value ?? '').toUpperCase();
 
-  if (normalized === 'OPEN' || normalized === 'APPLIED' || normalized === 'APPROVED') {
+  if (
+    normalized === 'OPEN' ||
+    normalized === 'APPLIED' ||
+    normalized === 'APPROVED' ||
+    normalized === 'PAID'
+  ) {
     return 'border-emerald-200 bg-emerald-50 text-emerald-700';
   }
   if (normalized === 'REJECTED' || normalized === 'DISQUALIFIED') {
     return 'border-rose-200 bg-rose-50 text-rose-700';
   }
-  if (normalized === 'PENDING' || normalized === 'ACCEPTED' || normalized === 'COMPLETED') {
+  if (
+    normalized === 'PENDING' ||
+    normalized === 'INVITED' ||
+    normalized === 'ACCEPTED' ||
+    normalized === 'COMPLETED'
+  ) {
     return 'border-amber-200 bg-amber-50 text-amber-700';
   }
 
@@ -39,7 +49,7 @@ function canApply(campaign: Campaign): boolean {
   }
 
   const myStatus = (campaign.myApplicationStatus ?? '').toUpperCase();
-  if (['APPLIED', 'ACCEPTED', 'COMPLETED', 'DISQUALIFIED'].includes(myStatus)) {
+  if (['APPLIED', 'INVITED', 'ACCEPTED', 'COMPLETED', 'DISQUALIFIED'].includes(myStatus)) {
     return false;
   }
 
@@ -67,7 +77,9 @@ export default function PaidJobsPage() {
     }
     if (campaignFilter === 'APPLIED') {
       return campaigns.filter((campaign) =>
-        ['APPLIED', 'ACCEPTED'].includes((campaign.myApplicationStatus ?? '').toUpperCase()),
+        ['APPLIED', 'INVITED', 'ACCEPTED'].includes(
+          (campaign.myApplicationStatus ?? '').toUpperCase(),
+        ),
       );
     }
     if (campaignFilter === 'SUBMITTED') {

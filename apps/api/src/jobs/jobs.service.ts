@@ -1,7 +1,11 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { buildBullConnectionOptions } from './bull-connection';
-import { DAILY_STEPS_QUEUE, MATCHES_QUEUE } from './queues.constants';
+import {
+  CAMPAIGNS_QUEUE,
+  DAILY_STEPS_QUEUE,
+  MATCHES_QUEUE,
+} from './queues.constants';
 
 @Injectable()
 export class JobsService implements OnModuleInit, OnModuleDestroy {
@@ -10,6 +14,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
   private readonly connection = buildBullConnectionOptions();
   private readonly dailyStepsQueue: Queue;
   private readonly matchesQueue: Queue;
+  private readonly campaignsQueue: Queue;
 
   constructor() {
     this.dailyStepsQueue = new Queue(DAILY_STEPS_QUEUE, {
@@ -17,6 +22,10 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.matchesQueue = new Queue(MATCHES_QUEUE, {
+      connection: this.connection,
+    });
+
+    this.campaignsQueue = new Queue(CAMPAIGNS_QUEUE, {
       connection: this.connection,
     });
   }
@@ -62,6 +71,33 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
       },
     );
 
+    await this.dailyStepsQueue.add(
+      'clean-expired-steps',
+      {},
+      {
+        jobId: 'clean-expired-steps-nightly',
+        repeat: { pattern: '30 1 * * *' },
+      },
+    );
+
+    await this.matchesQueue.add(
+      'refresh-active-feeds',
+      {},
+      {
+        jobId: 'refresh-active-feeds-every-2h',
+        repeat: { pattern: '15 */2 * * *' },
+      },
+    );
+
+    await this.campaignsQueue.add(
+      'auto-close-campaigns',
+      {},
+      {
+        jobId: 'auto-close-campaigns-half-hourly',
+        repeat: { pattern: '*/30 * * * *' },
+      },
+    );
+
     this.logger.log('Recurring jobs scheduled');
   }
 
@@ -86,6 +122,10 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await Promise.all([this.dailyStepsQueue.close(), this.matchesQueue.close()]);
+    await Promise.all([
+      this.dailyStepsQueue.close(),
+      this.matchesQueue.close(),
+      this.campaignsQueue.close(),
+    ]);
   }
 }

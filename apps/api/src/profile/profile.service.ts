@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { InteractionAction } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { toFollowerTier } from '@/common/utils/tier';
 import { JobsService } from '@/jobs/jobs.service';
@@ -133,5 +134,71 @@ export class ProfileService {
     }
 
     return creator;
+  }
+
+  async getSavedCreators(userId: string) {
+    const saved = await this.prisma.interaction.findMany({
+      where: {
+        actorUserId: userId,
+        action: InteractionAction.SAVE,
+      },
+      select: {
+        targetUserId: true,
+        createdAt: true,
+        target: {
+          select: {
+            id: true,
+            displayName: true,
+            username: true,
+            creatorProfile: true,
+            streak: {
+              select: {
+                currentStreak: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 500,
+    });
+
+    const seen = new Set<string>();
+    const creators: Array<{
+      savedAt: Date;
+      creator: {
+        id: string;
+        displayName: string;
+        username: string | null;
+        creatorProfile: unknown;
+        streak: { currentStreak: number } | null;
+      };
+    }> = [];
+
+    for (const row of saved) {
+      if (seen.has(row.targetUserId) || !row.target.creatorProfile) {
+        continue;
+      }
+
+      seen.add(row.targetUserId);
+      creators.push({
+        savedAt: row.createdAt,
+        creator: {
+          id: row.target.id,
+          displayName: row.target.displayName,
+          username: row.target.username,
+          creatorProfile: row.target.creatorProfile,
+          streak: row.target.streak,
+        },
+      });
+
+      if (creators.length >= 100) {
+        break;
+      }
+    }
+
+    return creators;
   }
 }

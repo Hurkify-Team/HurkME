@@ -1,10 +1,15 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { Job, Worker } from 'bullmq';
+import { CampaignsService } from '@/campaigns/campaigns.service';
 import { DailyStepsService } from '@/daily-steps/daily-steps.service';
 import { DiscoveryService } from '@/discovery/discovery.service';
 import { MatchingService } from '@/discovery/matching.service';
 import { buildBullConnectionOptions } from '@/jobs/bull-connection';
-import { DAILY_STEPS_QUEUE, MATCHES_QUEUE } from '@/jobs/queues.constants';
+import {
+  CAMPAIGNS_QUEUE,
+  DAILY_STEPS_QUEUE,
+  MATCHES_QUEUE,
+} from '@/jobs/queues.constants';
 
 @Injectable()
 export class WorkerRunnerService implements OnModuleDestroy {
@@ -17,6 +22,7 @@ export class WorkerRunnerService implements OnModuleDestroy {
     private readonly dailyStepsService: DailyStepsService,
     private readonly matchingService: MatchingService,
     private readonly discoveryService: DiscoveryService,
+    private readonly campaignsService: CampaignsService,
   ) {}
 
   start() {
@@ -27,6 +33,12 @@ export class WorkerRunnerService implements OnModuleDestroy {
           this.logger.log('Running daily step assignments');
           const count = await this.dailyStepsService.assignDailyStepsForAllUsers();
           return { assignedForUsers: count };
+        }
+
+        if (job.name === 'clean-expired-steps') {
+          this.logger.log('Cleaning stale assigned daily steps');
+          const updated = await this.dailyStepsService.cleanExpiredAssignedSteps();
+          return { markedSkipped: updated };
         }
 
         return null;
@@ -65,11 +77,34 @@ export class WorkerRunnerService implements OnModuleDestroy {
           return { userId };
         }
 
+        if (job.name === 'refresh-active-feeds') {
+          this.logger.log('Refreshing feeds for active creators');
+          const refreshedUsers = await this.discoveryService.refreshFeedsForActiveUsers();
+          return { refreshedUsers };
+        }
+
         return null;
       },
       {
         connection: this.connection,
         concurrency: 4,
+      },
+    );
+
+    const campaignsWorker = new Worker(
+      CAMPAIGNS_QUEUE,
+      async (job: Job) => {
+        if (job.name === 'auto-close-campaigns') {
+          this.logger.log('Auto-closing expired campaigns');
+          const closed = await this.campaignsService.autoCloseExpiredCampaigns();
+          return { closed };
+        }
+
+        return null;
+      },
+      {
+        connection: this.connection,
+        concurrency: 1,
       },
     );
 
@@ -81,7 +116,11 @@ export class WorkerRunnerService implements OnModuleDestroy {
       this.logger.error(`Match job failed: ${job?.id ?? 'unknown'}`, error);
     });
 
-    this.workers.push(dailyStepsWorker, matchesWorker);
+    campaignsWorker.on('failed', (job, error) => {
+      this.logger.error(`Campaign job failed: ${job?.id ?? 'unknown'}`, error);
+    });
+
+    this.workers.push(dailyStepsWorker, matchesWorker, campaignsWorker);
     this.logger.log('Workers started');
   }
 

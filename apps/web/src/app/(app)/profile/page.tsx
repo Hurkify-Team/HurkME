@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { InlineError } from '@/components/inline-error';
 import { SectionCard } from '@/components/section-card';
 import { useApiClient } from '@/lib/api';
+import type { SavedCreatorEntry } from '@/lib/types';
 
 export default function ProfilePage() {
   const { request } = useApiClient();
@@ -12,17 +13,20 @@ export default function ProfilePage() {
   const [streak, setStreak] = useState<{ currentStreak: number; longestStreak: number } | null>(
     null,
   );
+  const [savedCreators, setSavedCreators] = useState<SavedCreatorEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [meRes, streakRes] = await Promise.all([
+        const [meRes, streakRes, savedRes] = await Promise.all([
           request<any>('/me'),
           request<{ currentStreak: number; longestStreak: number }>('/streaks'),
+          request<SavedCreatorEntry[]>('/profile/saved-creators'),
         ]);
         setMe(meRes);
         setStreak(streakRes);
+        setSavedCreators(savedRes);
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not load profile');
@@ -98,7 +102,31 @@ export default function ProfilePage() {
           Campaign rating will show after your first approved paid jobs.
         </div>
         <div className="mt-3 rounded-xl border border-slate-200 p-3 text-sm text-slate-700">
-          Saved creators list will be expanded in next iteration.
+          <p className="mb-2 font-semibold text-brand-ink">Saved creators</p>
+          <div className="space-y-2">
+            {savedCreators.map((entry) => (
+              <div
+                key={entry.creator.id}
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+              >
+                <p className="font-medium text-brand-ink">{entry.creator.displayName}</p>
+                <p className="text-xs text-slate-600">
+                  {entry.creator.creatorProfile.primaryNiche} •{' '}
+                  {entry.creator.creatorProfile.followerTier} •{' '}
+                  {entry.creator.creatorProfile.primaryPlatform}
+                </p>
+                <Link
+                  href={`/creators/${entry.creator.id}`}
+                  className="mt-1 inline-block text-xs text-brand-ocean underline"
+                >
+                  View profile
+                </Link>
+              </div>
+            ))}
+            {!savedCreators.length ? (
+              <p className="text-xs text-slate-500">No saved creators yet.</p>
+            ) : null}
+          </div>
         </div>
       </SectionCard>
     </div>
