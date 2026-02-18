@@ -9,16 +9,21 @@ export class PrismaService
   private readonly logger = new Logger(PrismaService.name);
 
   async onModuleInit(): Promise<void> {
-    if (process.env.SKIP_PRISMA_CONNECT === 'true') {
-      this.logger.warn('Skipping Prisma bootstrap connection (SKIP_PRISMA_CONNECT=true).');
+    const bootstrapConnectEnabled = process.env.PRISMA_BOOTSTRAP_CONNECT === 'true';
+
+    if (!bootstrapConnectEnabled || process.env.SKIP_PRISMA_CONNECT === 'true') {
+      this.logger.log(
+        'Skipping Prisma bootstrap connection. Enable it with PRISMA_BOOTSTRAP_CONNECT=true.',
+      );
       return;
     }
 
     const timeoutMs = Number(process.env.PRISMA_CONNECT_TIMEOUT_MS ?? 5000);
 
     try {
+      // Do not block API boot indefinitely if the DB handshake is slow.
       await Promise.race([
-        this.$connect(),
+        Promise.resolve().then(() => this.$connect()),
         new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error(`Prisma connect timeout after ${timeoutMs}ms`)), timeoutMs);
         }),

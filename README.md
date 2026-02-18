@@ -47,19 +47,25 @@ cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
 ```
 
-4. Run migrations + seed:
+4. Keep API boot fast in local dev (recommended):
+```bash
+# in apps/api/.env
+PRISMA_BOOTSTRAP_CONNECT=false
+```
+
+5. Run migrations + seed:
 ```bash
 npm --workspace @hurkme/api run prisma:generate
 npm --workspace @hurkme/api run migrate:deploy
 npm --workspace @hurkme/api run seed
 ```
 
-5. Start apps:
+6. Start apps:
 ```bash
 npm run dev
 ```
 
-6. Start worker (second terminal):
+7. Start worker (second terminal):
 ```bash
 npm run dev:worker
 ```
