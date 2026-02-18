@@ -5,11 +5,42 @@ import {
 } from '@nestjs/common';
 import { ApplicationStatus, CampaignStatus, ReviewStatus } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
+import { startOfToday } from '@/common/utils/date';
 import { SubmitCampaignDto } from './dto/submit-campaign.dto';
 
 @Injectable()
 export class CampaignsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private assertCreatorEligibility(input: {
+    campaign: {
+      tier: string;
+      minFollowers: number;
+      maxFollowers: number | null;
+    };
+    profile: {
+      followerTier: string;
+      followerCount: number;
+    } | null;
+  }) {
+    const { campaign, profile } = input;
+
+    if (!profile) {
+      throw new BadRequestException('Complete onboarding before applying');
+    }
+
+    if (profile.followerTier !== campaign.tier) {
+      throw new BadRequestException('Follower tier does not match this paid job');
+    }
+
+    if (profile.followerCount < campaign.minFollowers) {
+      throw new BadRequestException('Follower count is below this paid job minimum');
+    }
+
+    if (campaign.maxFollowers && profile.followerCount > campaign.maxFollowers) {
+      throw new BadRequestException('Follower count is above this paid job maximum');
+    }
+  }
 
   private parseStatus(status?: string): CampaignStatus | undefined {
     if (!status) {
@@ -74,9 +105,17 @@ export class CampaignsService {
   }
 
   async applyToCampaign(userId: string, campaignId: string) {
-    const [campaign, profile] = await Promise.all([
+    const [campaign, profile, existingApplication] = await Promise.all([
       this.prisma.campaign.findUnique({ where: { id: campaignId } }),
       this.prisma.creatorProfile.findUnique({ where: { userId } }),
+      this.prisma.campaignApplication.findUnique({
+        where: {
+          campaignId_userId: {
+            campaignId,
+            userId,
+          },
+        },
+      }),
     ]);
 
     if (!campaign) {
@@ -87,21 +126,49 @@ export class CampaignsService {
       throw new BadRequestException('Campaign is not open for applications');
     }
 
-    if (!profile) {
-      throw new BadRequestException('Complete onboarding before applying');
+    this.assertCreatorEligibility({ campaign, profile });
+
+    if (existingApplication) {
+      if (existingApplication.status === ApplicationStatus.DISQUALIFIED) {
+        throw new BadRequestException('You are disqualified from this paid job');
+      }
+
+      if (existingApplication.status === ApplicationStatus.COMPLETED) {
+        throw new BadRequestException('You already submitted this paid job');
+      }
+
+      return existingApplication;
     }
 
-    if (profile.followerTier !== campaign.tier) {
-      throw new BadRequestException('Follower tier does not match this paid job');
+    return this.prisma.campaignApplication.create({
+      data: {
+        campaignId,
+        userId,
+        status: ApplicationStatus.APPLIED,
+      },
+    });
+  }
+
+  async inviteCreatorToCampaign(campaignId: string, userId: string) {
+    const [campaign, profile] = await Promise.all([
+      this.prisma.campaign.findUnique({ where: { id: campaignId } }),
+      this.prisma.creatorProfile.findUnique({ where: { userId } }),
+    ]);
+
+    if (!campaign) {
+      throw new NotFoundException('Campaign not found');
     }
 
-    if (profile.followerCount < campaign.minFollowers) {
-      throw new BadRequestException('Follower count is below this paid job minimum');
+    const invitableStatuses: CampaignStatus[] = [
+      CampaignStatus.OPEN,
+      CampaignStatus.DRAFT,
+    ];
+
+    if (!invitableStatuses.includes(campaign.status)) {
+      throw new BadRequestException('Campaign is not accepting invites now');
     }
 
-    if (campaign.maxFollowers && profile.followerCount > campaign.maxFollowers) {
-      throw new BadRequestException('Follower count is above this paid job maximum');
-    }
+    this.assertCreatorEligibility({ campaign, profile });
 
     return this.prisma.campaignApplication.upsert({
       where: {
@@ -111,12 +178,12 @@ export class CampaignsService {
         },
       },
       update: {
-        status: ApplicationStatus.APPLIED,
+        status: ApplicationStatus.INVITED,
       },
       create: {
         campaignId,
         userId,
-        status: ApplicationStatus.APPLIED,
+        status: ApplicationStatus.INVITED,
       },
     });
   }
@@ -199,5 +266,24 @@ export class CampaignsService {
     });
 
     return submission;
+  }
+
+  async autoCloseExpiredCampaigns() {
+    const today = startOfToday();
+    const result = await this.prisma.campaign.updateMany({
+      where: {
+        status: {
+          in: [CampaignStatus.OPEN, CampaignStatus.IN_REVIEW],
+        },
+        endDate: {
+          lt: today,
+        },
+      },
+      data: {
+        status: CampaignStatus.CLOSED,
+      },
+    });
+
+    return result.count;
   }
 }

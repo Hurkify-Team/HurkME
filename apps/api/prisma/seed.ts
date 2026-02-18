@@ -1,4 +1,17 @@
-import { PrismaClient, Goal, GrowthStyle, Niche, PrimaryPlatform, CampaignTier, PayoutModel, CampaignStatus, UserRole, AudienceRegion, FollowerTier } from '@prisma/client';
+import {
+  PrismaClient,
+  Goal,
+  GrowthStyle,
+  Niche,
+  PrimaryPlatform,
+  CampaignTier,
+  PayoutModel,
+  CampaignStatus,
+  UserRole,
+  AudienceRegion,
+  FollowerTier,
+  ApplicationStatus,
+} from '@prisma/client';
 import { classifyFollowerTier } from '@hurkme/shared';
 
 const prisma = new PrismaClient();
@@ -273,7 +286,7 @@ async function main() {
     },
   });
 
-  await prisma.campaign.upsert({
+  const seededCampaign = await prisma.campaign.upsert({
     where: { title: 'Hustle Hub: Creator Toolkit Launch' },
     update: {
       status: CampaignStatus.OPEN,
@@ -307,6 +320,41 @@ async function main() {
       status: CampaignStatus.OPEN,
     },
   });
+
+  await Promise.all([
+    prisma.campaignApplication.upsert({
+      where: {
+        campaignId_userId: {
+          campaignId: seededCampaign.id,
+          userId: creatorA.id,
+        },
+      },
+      update: {
+        status: ApplicationStatus.APPLIED,
+      },
+      create: {
+        campaignId: seededCampaign.id,
+        userId: creatorA.id,
+        status: ApplicationStatus.APPLIED,
+      },
+    }),
+    prisma.campaignApplication.upsert({
+      where: {
+        campaignId_userId: {
+          campaignId: seededCampaign.id,
+          userId: creatorB.id,
+        },
+      },
+      update: {
+        status: ApplicationStatus.INVITED,
+      },
+      create: {
+        campaignId: seededCampaign.id,
+        userId: creatorB.id,
+        status: ApplicationStatus.INVITED,
+      },
+    }),
+  ]);
 
   await prisma.streak.upsert({
     where: { userId: creatorA.id },

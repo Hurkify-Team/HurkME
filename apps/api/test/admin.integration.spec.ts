@@ -6,6 +6,7 @@ import { validate } from 'class-validator';
 import { ReviewStatus } from '@prisma/client';
 import { AdminController } from '@/admin/admin.controller';
 import { AdminService } from '@/admin/admin.service';
+import { CampaignsService } from '@/campaigns/campaigns.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { PayoutService } from '@/campaigns/payout.service';
 import { ReviewSubmissionDto } from '@/admin/dto/review-submission.dto';
@@ -24,6 +25,9 @@ type PrismaTx = {
   payout: {
     deleteMany: jest.Mock;
   };
+  adminAuditLog: {
+    create: jest.Mock;
+  };
 };
 
 type PrismaMock = {
@@ -41,12 +45,19 @@ type PrismaMock = {
   payout: {
     deleteMany: jest.Mock;
   };
+  adminAuditLog: {
+    create: jest.Mock;
+  };
   $transaction: jest.Mock;
 };
 
 type PayoutServiceMock = {
   computeCampaignPayouts: jest.Mock;
   buildPayoutCsv: jest.Mock;
+};
+
+type CampaignsServiceMock = {
+  inviteCreatorToCampaign: jest.Mock;
 };
 
 const submissionId = '6e8b5c96-4582-4f0b-a85d-6c22c673ec40';
@@ -68,6 +79,9 @@ function createPrismaMock(): PrismaMock {
     payout: {
       deleteMany: jest.fn(),
     },
+    adminAuditLog: {
+      create: jest.fn(),
+    },
   };
 
   return {
@@ -85,6 +99,9 @@ function createPrismaMock(): PrismaMock {
     payout: {
       deleteMany: tx.payout.deleteMany,
     },
+    adminAuditLog: {
+      create: tx.adminAuditLog.create,
+    },
     $transaction: jest.fn(async (fn: (innerTx: PrismaTx) => Promise<unknown>) => fn(tx)),
   };
 }
@@ -93,6 +110,12 @@ function createPayoutServiceMock(): PayoutServiceMock {
   return {
     computeCampaignPayouts: jest.fn(),
     buildPayoutCsv: jest.fn(),
+  };
+}
+
+function createCampaignsServiceMock(): CampaignsServiceMock {
+  return {
+    inviteCreatorToCampaign: jest.fn(),
   };
 }
 
@@ -107,10 +130,19 @@ describe('admin endpoints integration', () => {
   let service: AdminService;
   let prisma: PrismaMock;
   let payoutService: PayoutServiceMock;
+  let campaignsService: CampaignsServiceMock;
+  const adminUser = {
+    id: '0d47e9ed-ac75-4d26-90c2-9c723ac95a85',
+    authProviderId: 'demo_admin_1',
+    email: 'admin@hurkme.test',
+    displayName: 'Admin Tester',
+    role: 'ADMIN' as const,
+  };
 
   beforeEach(async () => {
     prisma = createPrismaMock();
     payoutService = createPayoutServiceMock();
+    campaignsService = createCampaignsServiceMock();
 
     prisma.campaignSubmission.findUnique.mockResolvedValue({
       id: submissionId,
@@ -144,6 +176,10 @@ describe('admin endpoints integration', () => {
         {
           provide: PayoutService,
           useValue: payoutService,
+        },
+        {
+          provide: CampaignsService,
+          useValue: campaignsService,
         },
       ],
     }).compile();
@@ -183,13 +219,17 @@ describe('admin endpoints integration', () => {
   });
 
   it('approves a submission and persists verified metrics', async () => {
-    const response = await controller.reviewSubmission(submissionId, {
-      reviewStatus: ReviewStatus.APPROVED,
-      reviewerNotes: 'Looks valid',
-      verifiedViews: 9_000,
-      verifiedLikes: 700,
-      verifiedComments: 40,
-    });
+    const response = await controller.reviewSubmission(
+      adminUser,
+      submissionId,
+      {
+        reviewStatus: ReviewStatus.APPROVED,
+        reviewerNotes: 'Looks valid',
+        verifiedViews: 9_000,
+        verifiedLikes: 700,
+        verifiedComments: 40,
+      },
+    );
 
     expect(response.reviewStatus).toBe('APPROVED');
     expect(prisma.campaignMetric.upsert).toHaveBeenCalledTimes(1);
@@ -216,10 +256,14 @@ describe('admin endpoints integration', () => {
   });
 
   it('rejects a submission and clears payout artifacts', async () => {
-    const response = await controller.reviewSubmission(submissionId, {
-      reviewStatus: ReviewStatus.REJECTED,
-      reviewerNotes: 'Proof mismatch across screenshots',
-    });
+    const response = await controller.reviewSubmission(
+      adminUser,
+      submissionId,
+      {
+        reviewStatus: ReviewStatus.REJECTED,
+        reviewerNotes: 'Proof mismatch across screenshots',
+      },
+    );
 
     expect(response.reviewStatus).toBe('REJECTED');
     expect(prisma.campaignApplication.updateMany).toHaveBeenCalledWith(
@@ -243,7 +287,7 @@ describe('admin endpoints integration', () => {
       payouts: [{ userId, totalPayout: 150_000 }],
     });
 
-    const result = await controller.computePayouts(campaignId);
+    const result = await controller.computePayouts(adminUser, campaignId);
     expect(result).toEqual({
       campaignId,
       approvedCount: 1,
@@ -262,7 +306,7 @@ describe('admin endpoints integration', () => {
       send: jest.fn(),
     };
 
-    await controller.payoutReport(campaignId, response as Response);
+    await controller.payoutReport(adminUser, campaignId, response as Response);
 
     expect(payoutService.buildPayoutCsv).toHaveBeenCalledWith(campaignId);
     expect(response.setHeader).toHaveBeenCalledWith('Content-Type', 'text/csv');

@@ -191,4 +191,20 @@ export class DailyStepsService {
 
     return users.length;
   }
+
+  async cleanExpiredAssignedSteps(cutoffDate = startOfToday()) {
+    const result = await this.prisma.userDailyStep.updateMany({
+      where: {
+        status: StepStatus.ASSIGNED,
+        dateAssigned: {
+          lt: cutoffDate,
+        },
+      },
+      data: {
+        status: StepStatus.SKIPPED,
+      },
+    });
+
+    return result.count;
+  }
 }
