@@ -11,3 +11,4 @@ coverage
 apps/api/prisma/dev.db
 apps/api/uploads
 .tools
+.pids
