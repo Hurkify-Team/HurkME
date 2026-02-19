@@ -1,6 +1,9 @@
 'use client';
 
-export const AUTH_BYPASS = process.env.NEXT_PUBLIC_AUTH_BYPASS === 'true';
+import { AUTH_BYPASS as AUTH_BYPASS_MODE } from './auth-mode';
+
+export const AUTH_BYPASS = AUTH_BYPASS_MODE;
+
 const DEV_STORAGE_KEY = 'hurkme_dev_auth_provider_id';
 
 export function getDevAuthProviderId(): string {

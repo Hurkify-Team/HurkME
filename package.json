@@ -9,6 +9,12 @@
   "scripts": {
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
+    "local:doctor": "./scripts/local-doctor.sh",
+    "local:up": "./scripts/local-up.sh --mode=stable",
+    "local:up:dev": "./scripts/local-up.sh --mode=dev",
+    "local:down": "./scripts/local-down.sh",
+    "local:down:infra": "./scripts/local-down.sh --with-infra",
+    "local:status": "./scripts/local-status.sh",
     "dev": "npm-run-all --parallel dev:api dev:web",
     "dev:api": "npm --workspace @hurkme/api run start:dev",
     "dev:web": "npm --workspace @hurkme/web run dev",

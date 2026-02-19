@@ -31,6 +31,32 @@ hurkme/
 - Monitoring: Sentry placeholder
 
 ## Quick start
+### Fastest path (recommended)
+```bash
+npm run local:doctor
+npm run local:up
+```
+
+This command:
+- starts Docker services
+- creates missing env files
+- runs migrations + seed
+- starts API + web + worker in `stable` mode (build + run)
+- prints the URLs to open
+
+Use these helpers:
+```bash
+npm run local:status
+npm run local:down
+npm run local:down:infra
+npm run local:up:dev
+```
+
+Modes:
+- `npm run local:up`: reliable mode, fewer startup hiccups.
+- `npm run local:up:dev`: watch mode for active coding.
+
+### Manual path
 1. Start infra:
 ```bash
 docker compose up -d
@@ -69,6 +95,25 @@ npm run dev
 ```bash
 npm run dev:worker
 ```
+
+## Localhost troubleshooting
+If localhost is not loading:
+1. Check service status:
+```bash
+npm run local:status
+```
+2. Restart all local services:
+```bash
+npm run local:down
+npm run local:up
+```
+3. Open the exact URLs:
+- `http://localhost:3000/home`
+- `http://localhost:4000/docs`
+4. If terminal says `npm: command not found` or `docker: command not found`, reopen terminal and ensure your PATH includes:
+- `/usr/local/bin`
+- `/opt/homebrew/bin` (Apple Silicon)
+5. If first web load is slow in dev mode, this is normal on first compile. Use `npm run local:up` for stable mode to avoid this.
 
 ## Local auth modes
 ### Demo mode (default in examples)

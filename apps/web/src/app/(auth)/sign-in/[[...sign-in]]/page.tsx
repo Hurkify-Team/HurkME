@@ -34,7 +34,8 @@ export default function SignInPage() {
             </button>
           </div>
           <p className="mt-4 text-xs text-slate-500">
-            Disable `NEXT_PUBLIC_AUTH_BYPASS` in `.env.local` to use Clerk sign-in.
+            Set Clerk publishable key and disable `NEXT_PUBLIC_AUTH_BYPASS` in `.env.local` to use
+            Clerk sign-in.
           </p>
         </div>
       </div>

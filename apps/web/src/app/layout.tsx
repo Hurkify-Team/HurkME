@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ClerkProvider } from '@clerk/nextjs';
 import { SentryBootstrap } from '@/components/sentry-bootstrap';
+import { AUTH_BYPASS } from '@/lib/auth-mode';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -9,9 +10,7 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const authBypass = process.env.NEXT_PUBLIC_AUTH_BYPASS === 'true';
-
-  if (authBypass) {
+  if (AUTH_BYPASS) {
     return (
       <html lang="en">
         <body>
