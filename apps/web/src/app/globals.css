@@ -8,7 +8,8 @@
   --ocean: #0f766e;
   --mint: #14b8a6;
   --clay: #f97316;
-  --font-sora: "Avenir Next", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-sora: "Avenir Next", "Poppins", "Nunito Sans", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-heading: "Futura", "Avenir Next Condensed", "Gill Sans", "Trebuchet MS", sans-serif;
   --font-plex-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
@@ -21,6 +22,46 @@ body {
   font-family: var(--font-sora), sans-serif;
   color: var(--ink);
   background: var(--surface);
+}
+
+.font-display {
+  font-family: var(--font-heading), sans-serif;
+}
+
+.landing-grid {
+  background-image:
+    linear-gradient(to right, rgba(15, 118, 110, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 118, 110, 0.08) 1px, transparent 1px);
+  background-size: 54px 54px;
+}
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+.reveal {
+  animation: reveal-up 0.8s ease both;
+}
+
+.float-slow {
+  animation: float-slow 10s ease-in-out infinite;
 }
 
 code,
